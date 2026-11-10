@@ -1,0 +1,48 @@
+{
+  "owner": {"telegram_user_id": "12345678"},
+  "protected": true,
+  "actions": {
+    "slack.post": {
+      "fields": ["text"],
+      "targets": {"#customer-updates": "C0123456789", "#sandbox": "C0123456790"},
+      "https": {
+        "url": "https://slack.com/api/chat.postMessage",
+        "method": "POST", "auth": "Bearer", "secret": "RULEBOOK_SLACK_TOKEN",
+        "body": {"channel": "$destination", "text": "$text", "mrkdwn": false,
+                 "unfurl_links": false, "unfurl_media": false},
+        "require": "ok", "receipt": "ts"
+      }
+    },
+    "discord.post": {
+      "fields": ["text"],
+      "targets": {"#sandbox": "123456789012345678"},
+      "https": {
+        "url": "https://discord.com/api/v10/channels/{destination}/messages",
+        "method": "POST", "auth": "Bot", "secret": "RULEBOOK_DISCORD_TOKEN",
+        "body": {"content": "$text", "allowed_mentions": {"parse": []}},
+        "receipt": "id"
+      }
+    },
+    "github.create_issue": {
+      "fields": ["title", "text"],
+      "targets": {"example-repo": "example/example"},
+      "https": {
+        "url": "https://api.github.com/repos/{destination}/issues",
+        "method": "POST", "auth": "Bearer", "secret": "RULEBOOK_GITHUB_TOKEN",
+        "body": {"title": "$title", "body": "$text"},
+        "receipt": "number"
+      }
+    },
+    "notion.comment": {
+      "fields": ["text"],
+      "targets": {"notes": "00000000-0000-4000-8000-000000000001"},
+      "https": {
+        "url": "https://api.notion.com/v1/comments",
+        "method": "POST", "auth": "Bearer", "secret": "RULEBOOK_NOTION_TOKEN",
+        "headers": {"Notion-Version": "2025-09-03"},
+        "body": {"parent": {"page_id": "$destination"}, "rich_text": [{"text": {"content": "$text"}}]},
+        "receipt": "id"
+      }
+    }
+  }
+}

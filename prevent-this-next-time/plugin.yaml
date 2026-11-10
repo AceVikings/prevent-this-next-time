@@ -1,0 +1,27 @@
+name: prevent-this-next-time
+version: "0.1.0"
+requires_hermes: ">=0.23.1"
+kind: standalone
+description: Set enforceable connector rules in chat. Block or require owner approval before configured writes.
+provides_tools:
+  - rulebook_capabilities
+  - rulebook_write
+provides_hooks:
+  - post_gateway_admission
+  - pre_tool_call
+optional_env:
+  - name: RULEBOOK_SLACK_TOKEN
+    description: Slack bot token for the Slack adapter
+    password: true
+  - name: RULEBOOK_DISCORD_TOKEN
+    description: Discord bot token for the Discord adapter
+    password: true
+  - name: RULEBOOK_GITHUB_TOKEN
+    description: GitHub token for the GitHub adapter
+    password: true
+  - name: RULEBOOK_NOTION_TOKEN
+    description: Notion integration token for the Notion adapter
+    password: true
+  - name: RULEBOOK_BRIDGE_TOKEN
+    description: Credential for an operator-configured HTTPS connector or bridge
+    password: true
