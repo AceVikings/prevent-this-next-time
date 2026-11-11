@@ -1,0 +1,10 @@
+gateway:
+  standalone: true
+plugins:
+  enabled: [prevent-this-next-time]
+mcp_servers: {}
+platform_toolsets:
+  cli: [rulebook, clarify, no_mcp]
+skills:
+  inline_shell: false
+platforms: {}

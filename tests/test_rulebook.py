@@ -63,7 +63,7 @@ class RulebookTest(unittest.TestCase):
         ident = self.stage("approved content only")
         for source in ({"user_id": "987654"}, {"chat_type": "group"}, {"chat_id": "987654"},
                        {"platform": "slack"}, {"shared_session": True}, {"is_bot": True}):
-            self.assertIn("Only the owner", self.command(f"Approve {ident}", **source))
+            self.assertIn("Only the authenticated owner", self.command(f"Approve {ident}", **source))
         self.assertIn("Review the exact", self.command(f"Approve {ident}"))
         self.assertIn("approved content only", self.command(f"Review {ident}"))
         self.assertEqual(self.writes, [])
@@ -198,6 +198,20 @@ class RulebookTest(unittest.TestCase):
         with self.assertRaises(adapters.DeliveryUnknown):
             adapters.send(action, request, lambda _: "test-secret", Opener(b'{"ok":false,"ts":"123.45"}'))
         self.assertIsNone(adapters.NoRedirect().redirect_request(None, None, 302, "", {}, "https://elsewhere.invalid"))
+
+    @unittest.skipUnless(hasattr(core.os, "getuid"), "native Unix owner identity")
+    def test_native_owner_context_requires_actor_route_and_private_session(self):
+        owner = f"uid:{core.os.getuid()}"
+        base = {"HERMES_SESSION_PLATFORM": "local", "HERMES_SESSION_USER_ID": owner,
+                "HERMES_SESSION_ACTOR_ID": owner, "HERMES_SESSION_CHAT_TYPE": "dm",
+                "HERMES_SESSION_CHAT_ID": "native-chat"}
+        self.assertIsNotNone(plugin.native_owner_context(base.get))
+        for key, value in (("HERMES_SESSION_ACTOR_ID", "other-user"), ("HERMES_SESSION_USER_ID", "other-user"),
+                           ("HERMES_SESSION_PLATFORM", "telegram"), ("HERMES_SESSION_CHAT_TYPE", "group"),
+                           ("HERMES_SESSION_CHAT_ID", ""), ("HERMES_CRON_SESSION", "1")):
+            changed = dict(base)
+            changed[key] = value
+            self.assertIsNone(plugin.native_owner_context(changed.get))
 
     def test_new_connectors_send_documented_requests_and_parse_receipts(self):
         import io

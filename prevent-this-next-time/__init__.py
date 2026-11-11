@@ -44,7 +44,7 @@ def parse(text):
 
 
 def authorized(config, platform, source):
-    owner = config["owner"]["telegram_user_id"]
+    owner = config["owner"].get("telegram_user_id")
     return (platform == source.get("platform") == "telegram" and source.get("chat_type") == "dm"
             and source.get("chat_id") == source.get("user_id") == owner and not source.get("thread_id")
             and not source.get("is_bot") and not source.get("shared_session"))
@@ -55,14 +55,14 @@ def capabilities(book):
             for name, action in book.actions.items()}
 
 
-def inbound(home, deliver, text, platform, source):
+def inbound(home, deliver, text, platform, source, *, owner_authenticated=False):
     command = parse(text.strip()) if isinstance(text, str) and len(text) <= 512 else None
     if command is None:
         return None
     try:
         book = Rulebook(home, deliver)
-        if not authorized(book.config, platform, source):
-            return {"action": "handled", "reply": "Only the owner can manage rules in their Telegram DM."}
+        if not owner_authenticated and not authorized(book.config, platform, source):
+            return {"action": "handled", "reply": "Only the authenticated owner can manage rules."}
         if command[0] == "help":
             reply = SUGGESTION
         elif command[0] == "list":
@@ -93,9 +93,27 @@ def gate(home, name):
     return None
 
 
+
+def native_owner_context(get_env):
+    """Require the gateway's current authenticated OS owner, never the model's arguments."""
+    if not hasattr(os, "getuid"):
+        return None
+    owner = f"uid:{os.getuid()}"
+    source = {key: get_env(f"HERMES_SESSION_{name}", "") for key, name in (
+        ("platform", "PLATFORM"), ("user_id", "USER_ID"), ("actor_id", "ACTOR_ID"),
+        ("chat_id", "CHAT_ID"), ("chat_type", "CHAT_TYPE"),
+    )}
+    if (source["platform"] != "local" or source["user_id"] != owner or source["actor_id"] != owner
+            or source["chat_type"] != "dm" or not source["chat_id"]
+            or get_env("HERMES_CRON_SESSION", "") == "1"):
+        return None
+    return source
+
+
 def register(ctx):
     from agent.secret_scope import get_secret
     from hermes_constants import get_hermes_home
+    from gateway.session_context import get_session_env
 
     # Hermes installs user plugins per profile. Use the active routed home for every invocation.
     def deliver(action, payload):
@@ -154,5 +172,27 @@ def register(ctx):
     async def handle(text, platform, source, **_):
         return await asyncio.to_thread(handle_inbound, text, platform, source)
 
+    def handle_native(user_message, parent_session_id="", **_):
+        if get_session_env("HERMES_SESSION_PLATFORM", "") != "local":
+            return None
+        command = parse(user_message.strip()) if isinstance(user_message, str) and len(user_message) <= 512 else None
+        try:
+            book = opened()
+            source = native_owner_context(get_session_env)
+            if parent_session_id or source is None or not book.config["owner"].get("local", True):
+                if command or book.config["protected"]:
+                    return {"action": "block", "message": "Only the authenticated local owner can use this profile."}
+                return None
+            if command is None:
+                return None
+            result = inbound(get_hermes_home(), deliver, user_message, "local", source,
+                             owner_authenticated=True)
+            return {"action": "block", "message": result["reply"]}
+        except (Rejected, OSError, ValueError, sqlite3.Error):
+            if command or os.environ.get("RULEBOOK_PROTECTED") == "1":
+                return {"action": "block", "message": "Rulebook is unavailable. Check this profile's setup."}
+            return None
+
+    ctx.register_hook("pre_llm_call", handle_native)
     ctx.register_hook("post_gateway_admission", handle)
     ctx.register_hook("pre_tool_call", lambda tool_name, **_: gate(get_hermes_home(), tool_name))

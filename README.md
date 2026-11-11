@@ -1,6 +1,6 @@
 # Prevent This Next Time
 
-A Hermes Agent plugin for rules that run before a connector write. Tell your Hermes bot, “From now on, ask me before posting in #customer-updates.” The next matching write stops at an approval request. “Never post in #customer-updates” blocks it outright.
+A Hermes Agent plugin for rules that run before a connector write. Tell Hermes in your Desktop or CLI thread, “From now on, ask me before posting in #customer-updates.” The next matching write stops at an approval request. “Never post in #customer-updates” blocks it outright.
 
 Rules apply to configured actions and canonical destinations. Slack is one example. The same rule engine handles Discord messages, GitHub and Linear issues, Notion comments, tasks in Asana, ClickUp and Todoist, and other connectors that expose a supported write API. [Hermes plugin documentation](https://hermes-agent.nousresearch.com/docs/developer-guide/plugins)
 
@@ -15,7 +15,13 @@ Rules apply to configured actions and canonical destinations. Slack is one examp
 | [ClickUp](https://developer.clickup.com/reference/createtask) | Create a task | List ID |
 | [Todoist](https://developer.todoist.com/api/v1/) | Create a task | API v1 project ID |
 
-## Setup on Hermes v0.23.1
+## Desktop and CLI setup on Hermes v0.23.1
+
+Use a dedicated local profile with [protected-local-config.yaml](examples/protected-local-config.yaml) as its Hermes configuration. In `rulebook/config.json`, set `"owner": {"local": true}` and configure your connector targets and credentials using [rulebook.json](examples/rulebook.json) as a starting point. Initialize and run the protected launcher using the commands below, then select that profile in Desktop or CLI.
+
+In your own thread, type `From now on, ask me before posting in #customer-updates`. Hermes receives the rule receipt in that thread before making an inference request. You can send `Review <id>`, `Approve <id>`, and `Deny <id>` in that thread too. This native owner path supports macOS and Linux and verifies both the route owner and the current turn's authenticated OS-user identity. Delegated turns and cron cannot manage rules through this path.
+
+## Optional Telegram setup on Hermes v0.23.1
 
 Use a new Hermes profile dedicated to the rulebook. Do not replace the config for your everyday profile. Set the Telegram token and owner ID through the profile's normal Hermes secret setup, and configure an inference model there if you want Hermes to act on ordinary chat messages.
 
@@ -30,13 +36,13 @@ Use a new Hermes profile dedicated to the rulebook. Do not replace the config fo
    "$HERMES_PYTHON" scripts/protected_gateway.py --home "$PROFILE_HOME"
    ```
 
-Stop any other gateway serving this profile or token before starting the protected launcher. The launcher is tied to Hermes v0.23.1 because effective tool inventory and gateway configuration are internal Hermes APIs. The plugin directory itself uses the plugin registration API. Rerun the integration suite before changing the Hermes version.
+Stop any other gateway serving this profile or token before starting the protected launcher. The launcher is tied to Hermes v0.23.1 because effective tool inventory and gateway configuration are internal Hermes APIs. The installed plugin uses public registration hooks, the pre-inference message hook, and the public task-local session identity API. Rerun the integration suite before changing the Hermes version.
 
 For the four task and issue providers added in 0.2.0, configure the corresponding personal API credential using the manifest's `RULEBOOK_LINEAR_TOKEN`, `RULEBOOK_ASANA_TOKEN`, `RULEBOOK_CLICKUP_TOKEN`, or `RULEBOOK_TODOIST_TOKEN` slot. Use a sandbox destination for the first write. For Todoist, use the project ID returned by API v1 so aliases for the same project use the same identifier.
 
-## In chat
+## Chat commands
 
-| Message to the owner Telegram bot | Effect |
+| Message in your authenticated owner thread | Effect |
 | --- | --- |
 | `Rulebook` | List configured actions and aliases. |
 | `From now on, ask me before posting in #customer-updates` | Set a Slack Ask rule in one message. |
@@ -55,7 +61,7 @@ Use the provider-specific secret for the bundled declarations. Use the optional 
 
 For APIs that need OAuth refresh, file uploads, signed requests, or a non-HTTP transport, put that logic in a trusted HTTPS adapter exposing one narrow operation per route. It must enforce its own resource and credential boundaries and return a verifiable JSON receipt. Adapters and their destination mappings are trusted operator configuration; the plugin does not discover identities from provider display names. Define each semantic write once to avoid an equivalent action bypassing its rule.
 
-The protected profile keeps generic MCP, shell, browser, code execution, delegation, and native connector tools out of the agent's inventory. An unsupported operation cannot be called from this profile through the rulebook. The Telegram conversation itself remains available for replies. Rules do not constrain other Hermes profiles, separate applications using the same account, or a local operator with access to change trusted configuration. Rotate credentials with the gateway stopped and discard pending approvals when changing the provider account.
+The protected profile keeps generic MCP, shell, browser, code execution, delegation, and native connector tools out of the agent's inventory. An unsupported operation cannot be called from this profile through the rulebook. The current owner thread remains available for replies. Rules do not constrain other Hermes profiles, separate applications using the same account, or a local operator with access to change trusted configuration. Rotate credentials with the gateway stopped and discard pending approvals when changing the provider account.
 
 ## Data and permissions
 

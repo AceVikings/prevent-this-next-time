@@ -55,12 +55,29 @@ class HermesIntegration(unittest.TestCase):
                           self.run_child(ROOT / "tests/hermes_fixture.py", "healthy", healthy, healthy_log))
 
 
+    def test_native_owner_thread_commands_use_pre_inference_hook(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home, log = self.fixture(Path(tmp), "native", True, False)
+            self.assertIn("Native owner thread", self.run_child(
+                ROOT / "tests/hermes_fixture.py", "native", home, log))
+
+    def test_local_only_profile_does_not_require_telegram(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            home, _ = self.fixture(Path(tmp), "local", True, False)
+            raw = (ROOT / "examples/protected-local-config.yaml").read_text()
+            (home / "config.yaml").write_text(raw)
+            config = json.loads((home / "rulebook/config.json").read_text())
+            config["owner"] = {"local": True}
+            (home / "rulebook/config.json").write_text(json.dumps(config))
+            self.assertIn("Protected profile verified", self.run_child(
+                ROOT / "scripts/protected_gateway.py", "--home", home, "--check"))
+
     def test_protected_refuses_supplemental_gateway_principals(self):
         with tempfile.TemporaryDirectory() as tmp:
             home, _ = self.fixture(Path(tmp), "protected", True, False)
             env = {"TELEGRAM_BOT_TOKEN": "12345678:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                    "TELEGRAM_ALLOWED_USERS": "12345678", "GATEWAY_ALLOWED_USERS": "*"}
-            self.assertIn("remove supplemental", self.run_child(
+            self.assertIn("Remove supplemental", self.run_child(
                 ROOT / "scripts/protected_gateway.py", "--home", home, "--check", expected=1, extra_env=env))
             (home / "pairing").mkdir(exist_ok=True)
             (home / "pairing" / "telegram-approved.json").write_text('{"9876": {}}')

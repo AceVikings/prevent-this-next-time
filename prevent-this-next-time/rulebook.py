@@ -42,9 +42,12 @@ def read_config(home):
     exact_keys(config, {"owner", "actions", "protected"})
     require(type(config["protected"]) is bool, "Set protected to true or false.")
     owner = config["owner"]
-    exact_keys(owner, {"telegram_user_id"})
-    require(isinstance(owner["telegram_user_id"], str) and re.fullmatch(r"[1-9][0-9]{0,19}",
-            owner["telegram_user_id"]), "Configure a numeric Telegram owner ID.")
+    exact_keys(owner, set(), {"telegram_user_id", "local"})
+    require(type(owner.get("local", True)) is bool, "Local owner access must be true or false.")
+    if "telegram_user_id" in owner:
+        require(isinstance(owner["telegram_user_id"], str) and re.fullmatch(r"[1-9][0-9]{0,19}",
+                owner["telegram_user_id"]), "Configure a numeric Telegram owner ID.")
+    require(owner.get("telegram_user_id") or owner.get("local", True), "Enable at least one owner interface.")
     return config, parse_actions(config["actions"])
 
 
@@ -136,7 +139,7 @@ class Rulebook:
                     conn.execute("INSERT INTO pending VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')",
                                  (ident, name, dest, revision, self.binding(action), encode(payload), now + TTL))
                 return {"status": "staged", "id": ident, "action": name, "destination": dest,
-                        "owner_instructions": f"In the owner Telegram DM, send Review {ident}, then Approve {ident} or Deny {ident}."}
+                        "owner_instructions": f"In your authenticated owner chat, send Review {ident}, then Approve {ident} or Deny {ident}."}
             receipt = self.deliver(action, payload)
         return {"status": "sent", "receipt": receipt}
 

@@ -37,12 +37,15 @@ def validate_raw(raw):
     require(isinstance(model, (str, dict)) and (isinstance(model, str) or model.keys() <= {
         "default", "provider", "base_url", "context_length"}), "Unexpected model settings.")
     platforms = raw.get("platforms", {})
-    require(set(platforms) == {"telegram"} and platforms["telegram"].get("enabled") is True
-            and platforms["telegram"].keys() <= {"enabled", "extra"}
-            and platforms["telegram"].get("extra", {}).keys() <= {"fallback_ips"},
-            "Telegram must be the only configured gateway adapter.")
+    require(set(platforms) <= {"telegram"}, "Only the optional Telegram adapter is supported.")
+    if "telegram" in platforms:
+        require(platforms["telegram"].get("enabled") is True
+                and platforms["telegram"].keys() <= {"enabled", "extra"}
+                and platforms["telegram"].get("extra", {}).keys() <= {"fallback_ips"},
+                "Unexpected Telegram adapter settings.")
     sets = raw.get("platform_toolsets", {})
-    require(set(sets) == {"telegram", "cli"}, "Pin both Telegram and CLI toolsets.")
+    require("cli" in sets and set(sets) <= {"telegram", "cli"}, "Pin the local CLI toolsets.")
+    require("telegram" not in platforms or "telegram" in sets, "Pin the Telegram toolsets when enabled.")
     for values in sets.values():
         require(isinstance(values, list) and all(isinstance(x, str) for x in values)
                 and {"rulebook", "no_mcp"} <= set(values) <= ALLOWED_TOOLSETS,
@@ -81,18 +84,21 @@ def preflight(home, init=False):
     require(not effective.get("mcp_servers"), "Protected startup refused: effective MCP servers are configured.")
     gateway = load_gateway_config_for_runner()
     require(not gateway.multiplex_profiles and not gateway.profile_routes, "Gateway must be standalone.")
-    require({p.value for p, c in gateway.platforms.items() if c.enabled} == {"telegram"} and
-            {p.value for p in gateway.get_connected_platforms()} == {"telegram"},
-            "Only Telegram may be enabled and connected in the protected gateway.")
-    owner = config["owner"]["telegram_user_id"]
+    expected_platforms = set(raw.get("platforms", {}))
+    require({p.value for p, c in gateway.platforms.items() if c.enabled} == expected_platforms and
+            {p.value for p in gateway.get_connected_platforms()} == expected_platforms,
+            "Connected gateway adapters differ from the declared profile.")
+    owner = config["owner"].get("telegram_user_id")
     grants = ("TELEGRAM_ALLOW_ALL_USERS", "TELEGRAM_GROUP_ALLOWED_USERS", "TELEGRAM_GROUP_ALLOWED_CHATS",
               "TELEGRAM_ALLOWED_CHATS", "TELEGRAM_ALLOW_BOTS", "GATEWAY_ALLOWED_USERS", "GATEWAY_ALLOW_ALL_USERS")
-    require(get_secret("TELEGRAM_ALLOWED_USERS", "") == owner and not any(get_secret(key) for key in grants),
-            "Set Telegram's allowlist to exactly the owner and remove supplemental Telegram or gateway grants.")
+    require(not any(get_secret(key) for key in grants), "Remove supplemental Telegram or gateway grants.")
+    if "telegram" in expected_platforms:
+        require(owner and get_secret("TELEGRAM_ALLOWED_USERS", "") == owner,
+                "Set Telegram's allowlist to exactly the configured owner.")
     require(os.environ.get("RULEBOOK_PROTECTED") == "1", "Protected launcher marker was overridden.")
 
     inventories = set()
-    for platform in ("telegram", "cli"):
+    for platform in raw["platform_toolsets"]:
         enabled = _get_platform_tools(effective, platform, include_default_mcp_servers=False)
         require(set(enabled) <= ALLOWED_TOOLSETS, "Effective profile toolsets include an alternate path.")
         tools = {t["function"]["name"] for t in get_tool_definitions(

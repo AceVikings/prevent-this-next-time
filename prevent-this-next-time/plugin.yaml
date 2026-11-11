@@ -1,5 +1,5 @@
 name: prevent-this-next-time
-version: "0.2.0"
+version: "0.3.0"
 requires_hermes: ">=0.23.1"
 kind: standalone
 description: Set enforceable connector rules in chat. Block or require owner approval before configured writes.
@@ -7,6 +7,7 @@ provides_tools:
   - rulebook_capabilities
   - rulebook_write
 provides_hooks:
+  - pre_llm_call
   - post_gateway_admission
   - pre_tool_call
 optional_env:

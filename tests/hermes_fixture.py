@@ -16,7 +16,7 @@ os.environ["HERMES_HOME"] = root
 os.environ["TELEGRAM_BOT_TOKEN"] = "12345678:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
 os.environ["TELEGRAM_ALLOWED_USERS"] = "12345678"
 os.environ["RULEBOOK_SLACK_TOKEN"] = "fixture-token"
-if mode == "healthy":
+if mode in ("healthy", "native"):
     os.environ["RULEBOOK_PROTECTED"] = "1"
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -84,3 +84,38 @@ else:
         body = json.loads(request.data)
         assert body["channel"] == "C0123456789" and body["text"] == content
     print("Protected fixture: alternate dispatch denied; owner review shows the exact staged write.")
+
+
+if mode == "native":
+    from agent.turn_context import _collect_pre_llm_call_context
+    from gateway.session_context import set_session_vars, clear_session_vars
+    owner = f"uid:{os.getuid()}"
+    agent = SimpleNamespace(session_id="native-session", model="fixture", platform="local",
+                            _parent_session_id="", _user_id=owner)
+
+    def native_turn(text, actor=owner, parent=""):
+        tokens = set_session_vars(platform="local", source="gui", chat_id="native-chat", chat_type="dm",
+                                  user_id=owner, actor_id=actor, cron_session="")
+        agent._parent_session_id = parent
+        try:
+            blocks = []
+            _collect_pre_llm_call_context(agent, effective_task_id="test", turn_id="native-turn",
+                                         original_user_message=text, messages=[{"role": "user", "content": text}],
+                                         conversation_history=None, blocks=blocks)
+            return blocks
+        finally:
+            clear_session_vars(tokens)
+
+    assert native_turn("From now on, never post in #customer-updates.")[0].startswith("BLOCK:")
+    assert guarded("blocked via native rule")["status"] == "blocked"
+    assert "authenticated local owner" in native_turn("Undo rule slack.post in #customer-updates", actor="other")[0]
+    assert "authenticated local owner" in native_turn("Undo rule slack.post in #customer-updates", parent="delegated")[0]
+    assert native_turn("From now on, ask me before posting in #customer-updates.")[0].startswith("ASK:")
+    ident = guarded("native approved content")["id"]
+    assert "native approved content" in native_turn(f"Review {ident}")[0]
+    with patch.object(urllib.request, "build_opener") as opener:
+        opener.return_value.open.return_value = io.BytesIO(b'{"ok":true,"ts":"555.66"}')
+        assert "Receipt: 555.66" in native_turn(f"Approve {ident}")[0]
+        assert "unavailable" in native_turn(f"Approve {ident}")[0]
+        opener.return_value.open.assert_called_once()
+    print("Native owner thread: setup, review, approval, replay, and unauthorized-actor checks passed.")
