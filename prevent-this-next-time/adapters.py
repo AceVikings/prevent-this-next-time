@@ -14,11 +14,16 @@ from urllib.parse import urlsplit
 KEY = re.compile(r"[a-z][a-z0-9_-]{0,47}")
 ALIAS = re.compile(r"[#@]?[a-z][a-z0-9_.-]{0,63}")
 FIELD = re.compile(r"[a-z][a-z0-9_]{0,31}")
+RESPONSE_PATH = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*")
 PROVIDER_HOSTS = {
     "RULEBOOK_SLACK_TOKEN": "slack.com",
     "RULEBOOK_DISCORD_TOKEN": "discord.com",
     "RULEBOOK_GITHUB_TOKEN": "api.github.com",
     "RULEBOOK_NOTION_TOKEN": "api.notion.com",
+    "RULEBOOK_LINEAR_TOKEN": "api.linear.app",
+    "RULEBOOK_ASANA_TOKEN": "app.asana.com",
+    "RULEBOOK_CLICKUP_TOKEN": "api.clickup.com",
+    "RULEBOOK_TODOIST_TOKEN": "api.todoist.com",
 }
 CUSTOM_SECRET = "RULEBOOK_BRIDGE_TOKEN"
 CREDENTIAL_HEADER = re.compile(r"(?:api-key|x-[a-z0-9-]*api-key|private-token)", re.I)
@@ -130,11 +135,15 @@ def parse_actions(values):
                 require(re.fullmatch(r"[CGD][A-Z0-9]{2,39}", target), "Use an uppercase Slack conversation ID.")
             elif name == "discord.post":
                 require(re.fullmatch(r"[1-9][0-9]{14,21}", target), "Use a Discord channel snowflake.")
-            elif name == "notion.comment":
+            elif name in ("asana.create_task", "clickup.create_task"):
+                require(re.fullmatch(r"[1-9][0-9]{0,39}", target), "Use the numeric project or list ID.")
+            elif name == "todoist.create_task":
+                require(re.fullmatch(r"[A-Za-z0-9]{1,64}", target), "Use the Todoist API v1 project ID.")
+            elif name in ("notion.comment", "linear.create_issue"):
                 try:
                     targets[alias] = str(uuid.UUID(target))
                 except ValueError:
-                    raise Rejected("Use a Notion page UUID.") from None
+                    raise Rejected("Use a Notion page or Linear team UUID.") from None
         exact_keys(spec, {"url", "method", "secret", "auth", "body", "receipt"}, {"require", "headers"})
         require(isinstance(spec["url"], str) and len(spec["url"]) < 400, "Invalid adapter URL.")
         url = spec["url"]
@@ -163,8 +172,8 @@ def parse_actions(values):
         tokens = _body_tokens(spec["body"])
         require(set(fields) <= tokens <= set(fields) | {"destination"} and
                 ("destination" in tokens or "{destination}" in url), "Map every field and the destination.")
-        require(isinstance(spec["receipt"], str) and all(FIELD.fullmatch(part) for part in spec["receipt"].split(".")), "Invalid receipt key.")
-        require("require" not in spec or isinstance(spec["require"], str) and FIELD.fullmatch(spec["require"]),
+        require(isinstance(spec["receipt"], str) and RESPONSE_PATH.fullmatch(spec["receipt"]), "Invalid receipt key.")
+        require("require" not in spec or isinstance(spec["require"], str) and RESPONSE_PATH.fullmatch(spec["require"]),
                 "Invalid success key.")
         route = (spec["method"], parts.netloc, parts.path.rstrip("/"))
         require(route not in routes, "Declare each write endpoint once so a second action cannot bypass its rules.")
@@ -175,6 +184,12 @@ def parse_actions(values):
         resolved_routes |= expanded
         actions[name] = Action(name, tuple(fields), targets, spec, fingerprint(raw))
     return actions
+
+
+def response_value(result, path):
+    for key in path.split("."):
+        result = result.get(key) if isinstance(result, dict) else None
+    return result
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -207,11 +222,11 @@ def send(action, payload, get_secret, opener=None):
         if len(raw) > 65536:
             raise ValueError("oversize receipt")
         result = json.loads(raw)
-        if not isinstance(result, dict) or "require" in spec and result.get(spec["require"]) is not True:
+        if not isinstance(result, dict) or result.get("errors"):
+            raise ValueError("provider returned errors")
+        if "require" in spec and response_value(result, spec["require"]) is not True:
             raise ValueError("missing success marker")
-        receipt = result
-        for key in spec["receipt"].split("."):
-            receipt = receipt.get(key) if isinstance(receipt, dict) else None
+        receipt = response_value(result, spec["receipt"])
         if type(receipt) not in (str, int) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,160}", str(receipt)):
             raise ValueError("missing receipt")
         return str(receipt)

@@ -199,6 +199,56 @@ class RulebookTest(unittest.TestCase):
             adapters.send(action, request, lambda _: "test-secret", Opener(b'{"ok":false,"ts":"123.45"}'))
         self.assertIsNone(adapters.NoRedirect().redirect_request(None, None, 302, "", {}, "https://elsewhere.invalid"))
 
+    def test_new_connectors_send_documented_requests_and_parse_receipts(self):
+        import io
+        from unittest.mock import Mock
+
+        fields = {"title": "test title", "text": "test body"}
+        cases = [
+            ("linear.create_issue", "engineering", "https://api.linear.app/graphql", "token",
+             {"data": {"issueCreate": {"success": True, "issue": {"id": "issue-1"}}}}, "issue-1"),
+            ("asana.create_task", "team-project", "https://app.asana.com/api/1.0/tasks", "Bearer token",
+             {"data": {"gid": "10001"}}, "10001"),
+            ("clickup.create_task", "team-list", "https://api.clickup.com/api/v2/list/123456789/task", "token",
+             {"id": "task-1"}, "task-1"),
+            ("todoist.create_task", "personal", "https://api.todoist.com/api/v1/tasks", "Bearer token",
+             {"id": "task-2"}, "task-2"),
+        ]
+        for name, alias, url, auth, response, receipt in cases:
+            with self.subTest(name=name):
+                action = self.book.actions[name]
+                target, request = action.prepare(alias, fields)
+                opener = Mock()
+                opener.open.return_value = io.BytesIO(json.dumps(response).encode())
+                self.assertEqual(adapters.send(action, request, lambda _: "token", opener), receipt)
+                sent = opener.open.call_args.args[0]
+                self.assertEqual(sent.full_url, url)
+                self.assertEqual(sent.headers["Authorization"], auth)
+                body = json.loads(sent.data)
+                if name.startswith("linear."):
+                    self.assertIn("issueCreate(input: $input)", body["query"])
+                    self.assertEqual(body["variables"]["input"],
+                                     {"teamId": target, "title": fields["title"], "description": fields["text"]})
+                elif name.startswith("asana."):
+                    self.assertEqual(body["data"], {"projects": [target], "name": fields["title"], "notes": fields["text"]})
+                elif name.startswith("clickup."):
+                    self.assertEqual(body, {"name": fields["title"], "description": fields["text"]})
+                else:
+                    self.assertEqual(body, {"project_id": target, "content": fields["title"], "description": fields["text"]})
+
+    def test_linear_receipt_requires_nested_success_without_graphql_errors(self):
+        import io
+        from unittest.mock import Mock
+
+        action = self.book.actions["linear.create_issue"]
+        _, request = action.prepare("engineering", {"title": "test", "text": "test"})
+        for success, errors in ((False, []), (True, [{"message": "partial failure"}])):
+            reply = {"data": {"issueCreate": {"success": success, "issue": {"id": "issue-1"}}}, "errors": errors}
+            opener = Mock()
+            opener.open.return_value = io.BytesIO(json.dumps(reply).encode())
+            with self.assertRaises(adapters.DeliveryUnknown):
+                adapters.send(action, request, lambda _: "token", opener)
+
     def test_untrusted_http_destinations_and_templates_are_rejected(self):
         for field, value in (("url", "https://{destination}.example.com"), ("url", "http://example.com"), ("url", "https://wrong.example/post"),
                              ("url", "https://example.com/?x={destination}"), ("secret", "OPENAI_API_KEY"), ("secret", "RULEBOOK_UNDECLARED_TOKEN"),

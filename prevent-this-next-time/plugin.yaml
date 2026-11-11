@@ -1,5 +1,5 @@
 name: prevent-this-next-time
-version: "0.1.0"
+version: "0.2.0"
 requires_hermes: ">=0.23.1"
 kind: standalone
 description: Set enforceable connector rules in chat. Block or require owner approval before configured writes.
@@ -24,4 +24,16 @@ optional_env:
     password: true
   - name: RULEBOOK_BRIDGE_TOKEN
     description: Credential for an operator-configured HTTPS connector or bridge
+    password: true
+  - name: RULEBOOK_LINEAR_TOKEN
+    description: Linear personal API key for issue creation
+    password: true
+  - name: RULEBOOK_ASANA_TOKEN
+    description: Asana personal access token for task creation
+    password: true
+  - name: RULEBOOK_CLICKUP_TOKEN
+    description: ClickUp personal API token for task creation
+    password: true
+  - name: RULEBOOK_TODOIST_TOKEN
+    description: Todoist API token for task creation
     password: true

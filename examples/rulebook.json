@@ -43,6 +43,49 @@
         "body": {"parent": {"page_id": "$destination"}, "rich_text": [{"text": {"content": "$text"}}]},
         "receipt": "id"
       }
+    },
+    "linear.create_issue": {
+      "fields": ["title", "text"],
+      "targets": {"engineering": "00000000-0000-4000-8000-000000000002"},
+      "https": {
+        "url": "https://api.linear.app/graphql",
+        "method": "POST", "auth": "Raw", "secret": "RULEBOOK_LINEAR_TOKEN",
+        "body": {
+          "query": "mutation CreateIssue($input: IssueCreateInput!) { issueCreate(input: $input) { success issue { id } } }",
+          "variables": {"input": {"teamId": "$destination", "title": "$title", "description": "$text"}}
+        },
+        "require": "data.issueCreate.success", "receipt": "data.issueCreate.issue.id"
+      }
+    },
+    "asana.create_task": {
+      "fields": ["title", "text"],
+      "targets": {"team-project": "1234567890123456"},
+      "https": {
+        "url": "https://app.asana.com/api/1.0/tasks",
+        "method": "POST", "auth": "Bearer", "secret": "RULEBOOK_ASANA_TOKEN",
+        "body": {"data": {"projects": ["$destination"], "name": "$title", "notes": "$text"}},
+        "receipt": "data.gid"
+      }
+    },
+    "clickup.create_task": {
+      "fields": ["title", "text"],
+      "targets": {"team-list": "123456789"},
+      "https": {
+        "url": "https://api.clickup.com/api/v2/list/{destination}/task",
+        "method": "POST", "auth": "Raw", "secret": "RULEBOOK_CLICKUP_TOKEN",
+        "body": {"name": "$title", "description": "$text"},
+        "receipt": "id"
+      }
+    },
+    "todoist.create_task": {
+      "fields": ["title", "text"],
+      "targets": {"personal": "6HWcc9PJCvPjCxC9"},
+      "https": {
+        "url": "https://api.todoist.com/api/v1/tasks",
+        "method": "POST", "auth": "Bearer", "secret": "RULEBOOK_TODOIST_TOKEN",
+        "body": {"project_id": "$destination", "content": "$title", "description": "$text"},
+        "receipt": "id"
+      }
     }
   }
 }

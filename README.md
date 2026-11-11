@@ -2,7 +2,7 @@
 
 A Hermes Agent plugin for rules that run before a connector write. Tell your Hermes bot, “From now on, ask me before posting in #customer-updates.” The next matching write stops at an approval request. “Never post in #customer-updates” blocks it outright.
 
-Rules apply to configured actions and canonical destinations. Slack is one example. The same rule engine handles Discord messages, GitHub issues, Notion comments, and other connectors that expose a supported write API. [Hermes plugin documentation](https://hermes-agent.nousresearch.com/docs/developer-guide/plugins)
+Rules apply to configured actions and canonical destinations. Slack is one example. The same rule engine handles Discord messages, GitHub and Linear issues, Notion comments, tasks in Asana, ClickUp and Todoist, and other connectors that expose a supported write API. [Hermes plugin documentation](https://hermes-agent.nousresearch.com/docs/developer-guide/plugins)
 
 | Example declaration | Write | Destination |
 | --- | --- | --- |
@@ -10,6 +10,10 @@ Rules apply to configured actions and canonical destinations. Slack is one examp
 | Discord | Post a message without mentions | Channel ID |
 | GitHub | Create an issue | Repository owner/name |
 | Notion | Comment on a page | Page ID |
+| [Linear](https://linear.app/developers/graphql) | Create an issue | Team UUID |
+| [Asana](https://developers.asana.com/reference/createtask) | Create a task | Project GID |
+| [ClickUp](https://developer.clickup.com/reference/createtask) | Create a task | List ID |
+| [Todoist](https://developer.todoist.com/api/v1/) | Create a task | API v1 project ID |
 
 ## Setup on Hermes v0.23.1
 
@@ -27,6 +31,8 @@ Use a new Hermes profile dedicated to the rulebook. Do not replace the config fo
    ```
 
 Stop any other gateway serving this profile or token before starting the protected launcher. The launcher is tied to Hermes v0.23.1 because effective tool inventory and gateway configuration are internal Hermes APIs. The plugin directory itself uses the plugin registration API. Rerun the integration suite before changing the Hermes version.
+
+For the four task and issue providers added in 0.2.0, configure the corresponding personal API credential using the manifest's `RULEBOOK_LINEAR_TOKEN`, `RULEBOOK_ASANA_TOKEN`, `RULEBOOK_CLICKUP_TOKEN`, or `RULEBOOK_TODOIST_TOKEN` slot. Use a sandbox destination for the first write. For Todoist, use the project ID returned by API v1 so aliases for the same project use the same identifier.
 
 ## In chat
 
